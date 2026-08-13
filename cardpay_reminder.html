@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CardPay Reminder</title>
+<style>
+:root{--bg:#f5f7fb;--card:#fff;--text:#182230;--muted:#687386;--accent:#4f46e5;--danger:#dc2626;--warn:#d97706;--ok:#059669;--border:#e5e7eb}
+*{box-sizing:border-box}body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--text)}
+header{background:#111827;color:white;padding:22px 18px 28px}header h1{margin:0;font-size:25px}header p{margin:5px 0 0;color:#cbd5e1}
+main{max-width:900px;margin:-12px auto 40px;padding:0 14px}
+.summary{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.stat{background:var(--card);border-radius:14px;padding:15px;box-shadow:0 3px 15px #0000000a}.stat b{display:block;font-size:21px}.stat span{color:var(--muted);font-size:12px}
+.panel{background:var(--card);margin-top:14px;border-radius:16px;padding:18px;box-shadow:0 3px 15px #0000000a}.panel h2{font-size:18px;margin:0 0 14px}
+button{border:0;border-radius:10px;padding:10px 14px;font-weight:700;cursor:pointer}.primary{background:var(--accent);color:#fff}.secondary{background:#eef2ff;color:#3730a3}.danger{background:#fee2e2;color:#991b1b}
+form{display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:10px}input,select{width:100%;padding:11px;border:1px solid var(--border);border-radius:9px;font:inherit;background:white}label{font-size:12px;color:var(--muted);display:block;margin-bottom:4px}
+.form-actions{grid-column:1/-1;display:flex;gap:8px}
+.cards{display:grid;gap:10px}.card{border:1px solid var(--border);border-radius:13px;padding:14px}.card-top{display:flex;justify-content:space-between;gap:10px}.card h3{margin:0;font-size:16px}.amount{font-size:20px;font-weight:800}.meta{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0;color:var(--muted);font-size:13px}.pill{padding:4px 8px;border-radius:99px;font-size:12px;font-weight:700}.overdue{background:#fee2e2;color:#991b1b}.soon{background:#fef3c7;color:#92400e}.later{background:#d1fae5;color:#065f46}.paid{background:#dbeafe;color:#1d4ed8}
+.card-actions{display:flex;gap:7px;margin-top:10px}.card-actions button{font-size:12px;padding:8px 10px}
+.empty{text-align:center;color:var(--muted);padding:20px}
+@media(max-width:650px){.summary{grid-template-columns:1fr 1fr}.summary .stat:last-child{grid-column:1/-1}form{grid-template-columns:1fr 1fr}.form-actions{grid-column:1/-1}.card-top{align-items:flex-start}}
+</style>
+</head>
+<body>
+<header><div style="max-width:900px;margin:auto"><h1>💳 CardPay Reminder</h1><p>Keep every credit card payment on schedule.</p></div></header>
+<main>
+<section class="summary">
+  <div class="stat"><b id="totalDue">$0.00</b><span>Minimum payments due</span></div>
+  <div class="stat"><b id="nextDue">—</b><span>Next payment</span></div>
+  <div class="stat"><b id="count">0</b><span>Cards tracked</span></div>
+</section>
+
+<section class="panel">
+<h2>Add a credit card</h2>
+<form id="cardForm">
+<div><label>Card name</label><input id="name" placeholder="e.g. Chase Freedom" required></div>
+<div><label>Due date</label><input id="due" type="date" required></div>
+<div><label>Minimum payment</label><input id="minimum" type="number" min="0" step=".01" placeholder="50.00" required></div>
+<div><label>Balance</label><input id="balance" type="number" min="0" step=".01" placeholder="1200.00"></div>
+<div class="form-actions"><button class="primary">Add card</button><button type="button" class="secondary" id="sample">Add sample</button></div>
+</form>
+</section>
+
+<section class="panel">
+<h2>Your cards</h2>
+<div id="cards" class="cards"></div>
+</section>
+</main>
+
+<script>
+const KEY="cardpay-reminders-v1";
+let cards=JSON.parse(localStorage.getItem(KEY)||"[]");
+const $=id=>document.getElementById(id);
+const money=n=>new Intl.NumberFormat("en-US",{style:"currency",currency:"USD"}).format(Number(n)||0);
+function save(){localStorage.setItem(KEY,JSON.stringify(cards));render()}
+function daysUntil(date){
+ const today=new Date(); today.setHours(0,0,0,0);
+ const d=new Date(date+"T00:00:00"); return Math.ceil((d-today)/86400000);
+}
+function status(c){
+ if(c.paid) return ["Paid","paid"];
+ const d=daysUntil(c.due);
+ if(d<0)return [`Overdue ${Math.abs(d)}d`,"overdue"];
+ if(d<=7)return [d===0?"Due today":`Due in ${d}d`,"soon"];
+ return [`Due in ${d}d`,"later"];
+}
+function render(){
+ cards.sort((a,b)=>a.due.localeCompare(b.due));
+ const unpaid=cards.filter(c=>!c.paid);
+ $("totalDue").textContent=money(unpaid.reduce((s,c)=>s+Number(c.minimum),0));
+ $("count").textContent=cards.length;
+ $("nextDue").textContent=unpaid.length ? new Date(unpaid[0].due+"T00:00:00").toLocaleDateString(undefined,{month:"short",day:"numeric"}) : "—";
+ $("cards").innerHTML=cards.length?cards.map(c=>{
+   const [label,cls]=status(c);
+   return `<div class="card">
+    <div class="card-top"><div><h3>${esc(c.name)}</h3><div class="meta"><span>Due ${fmt(c.due)}</span><span>Balance ${money(c.balance)}</span></div></div><div class="amount">${money(c.minimum)}</div></div>
+    <span class="pill ${cls}">${label}</span>
+    <div class="card-actions">
+      <button class="secondary" onclick="togglePaid('${c.id}')">${c.paid?"Mark unpaid":"Mark paid"}</button>
+      <button class="danger" onclick="removeCard('${c.id}')">Delete</button>
+    </div>
+   </div>`;
+ }).join(""):`<div class="empty">No cards yet. Add your first card above.</div>`;
+}
+function fmt(x){return new Date(x+"T00:00:00").toLocaleDateString(undefined,{month:"short",day:"numeric",year:"numeric"})}
+function esc(s){return String(s).replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]))}
+$("cardForm").addEventListener("submit",e=>{
+ e.preventDefault();
+ cards.push({id:crypto.randomUUID(),name:$("name").value,due:$("due").value,minimum:Number($("minimum").value),balance:Number($("balance").value||0),paid:false});
+ e.target.reset(); save();
+});
+$("sample").onclick=()=>{cards.push({id:crypto.randomUUID(),name:"Example Rewards Card",due:new Date(Date.now()+5*86400000).toISOString().slice(0,10),minimum:75,balance:1250,paid:false});save()};
+function togglePaid(id){const c=cards.find(x=>x.id===id);c.paid=!c.paid;save()}
+function removeCard(id){if(confirm("Delete this card?")){cards=cards.filter(x=>x.id!==id);save()}}
+render();
+</script>
+</body>
+</html>
