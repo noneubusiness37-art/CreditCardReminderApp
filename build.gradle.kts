@@ -1,4 +1,15 @@
 plugins {
-    id("com.android.application") version "8.6.1" apply false
-    id("org.jetbrains.kotlin.android") version "2.0.21" apply false
+    id("com.android.application")
+    id("org.jetbrains.kotlin.android")
+}
+android {
+    namespace = "com.example.creditcardreminder"
+    compileSdk = 35
+    defaultConfig {
+        applicationId = "com.example.creditcardreminder"
+        minSdk = 26
+        targetSdk = 35
+        versionCode = 1
+        versionName = "1.0"
+    }
 }
